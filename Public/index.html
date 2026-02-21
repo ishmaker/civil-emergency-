@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Civil Emergency Connect</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<!-- Calibri is a system font, no import needed -->
+<style>
+:root {
+  --bg:    #f5f4f1;
+  --surf:  #faf9f7;
+  --surf2: #f0eeea;
+  --surf3: #e8e5e0;
+  --bdr:   #000000;
+  --bdr2:  #b0aba2;
+  --txt:   #1e1e1c;
+  --txt2:  #5a5650;
+  --txt3:  #9a968e;
+
+  --red:   #c0392b;
+  --red-bg:#fdf0ee;
+  --grn:   #2a7a50;
+  --grn-bg:#edf7f2;
+  --amb:   #a0620a;
+  --blue:  #2a5f9a;
+  --pur:   #5a4a8a;
+
+  --mono: Calibri, 'Gill Sans', sans-serif;
+  --sans: Calibri, 'Gill Sans', sans-serif;
+  --r: 5px;
+}
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box;}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--txt);font-family:var(--sans);font-size:13px;line-height:1.5;}
+
+.app{display:flex;flex-direction:column;height:100vh;}
+.app-body{flex:1;display:flex;overflow:hidden;}
+
+/* HEADER */
+.hdr{
+  height:46px;background:var(--surf);border-bottom:1px solid var(--bdr);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 14px;flex-shrink:0;
+}
+.hdr-left{display:flex;align-items:center;gap:10px;}
+.live-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--red);flex-shrink:0;
+  animation:blink 1.8s ease-in-out infinite;
+}
+@keyframes blink{0%,100%{opacity:1;}50%{opacity:.25;}}
+.brand{font-family:var(--mono);font-size:11px;color:var(--txt);letter-spacing:.01em;}
+.brand span{color:var(--txt3);}
+.hdr-right{display:flex;align-items:center;gap:7px;}
+.conn-tag{
+  font-family:var(--mono);font-size:9px;padding:3px 8px;border-radius:3px;
+  border:1px solid var(--bdr2);color:var(--txt3);letter-spacing:.04em;
+}
+.conn-tag.online {color:var(--grn);border-color:rgba(74,171,120,.3);background:rgba(74,171,120,.06);}
+.conn-tag.offline{color:var(--amb);border-color:rgba(196,146,58,.3);background:rgba(196,146,58,.06);}
+.menu-btn{
+  display:none;align-items:center;justify-content:center;
+  width:30px;height:30px;border:1px solid var(--bdr2);border-radius:var(--r);
+  background:none;cursor:pointer;color:var(--txt2);font-size:13px;
+}
+
+/* NOTICE */
+.notice{
+  background:var(--red-bg);border-bottom:1px solid rgba(192,57,43,.15);
+  padding:4px 14px;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;gap:8px;
+}
+.notice-txt{font-family:var(--mono);font-size:9px;color:var(--red);letter-spacing:.06em;text-transform:uppercase;}
+.notice-flags{display:flex;gap:5px;}
+.flag{
+  font-family:var(--mono);font-size:8px;padding:1px 6px;border-radius:2px;
+  border:1px solid;display:none;letter-spacing:.04em;text-transform:uppercase;
+}
+.flag.on{display:block;}
+.flag.ambush{color:var(--amb);border-color:rgba(196,146,58,.35);background:rgba(196,146,58,.08);animation:blink 1s step-end infinite;}
+.flag.rural {color:var(--pur);border-color:rgba(122,104,168,.35);background:rgba(122,104,168,.08);}
+
+/* STATS */
+.stats{display:flex;background:var(--surf2);border-bottom:1px solid var(--bdr);flex-shrink:0;}
+.stat{flex:1;padding:6px 4px;text-align:center;border-right:1px solid var(--bdr);}
+.stat:last-child{border-right:none;}
+.stat-n{font-family:var(--mono);font-size:17px;font-weight:600;line-height:1;}
+.stat-n.r{color:var(--red);} .stat-n.g{color:var(--grn);}
+.stat-n.b{color:var(--blue);} .stat-n.a{color:var(--amb);} .stat-n.w{color:var(--txt);}
+.stat-l{font-family:var(--mono);font-size:7px;color:var(--txt3);text-transform:uppercase;letter-spacing:.1em;margin-top:2px;}
+
+/* SIDEBAR */
+.sidebar{
+  width:288px;background:var(--surf);border-right:1px solid var(--bdr);
+  display:flex;flex-direction:column;flex-shrink:0;z-index:300;
+}
+.sb-tabs{display:flex;border-bottom:1px solid var(--bdr);}
+.sb-tab{
+  flex:1;padding:8px 4px;font-family:var(--mono);font-size:8px;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--txt3);cursor:pointer;text-align:center;
+  border-bottom:2px solid transparent;transition:color .15s;
+}
+.sb-tab.on{color:var(--txt);border-bottom-color:var(--txt2);}
+.sb-tab:hover:not(.on){color:var(--txt2);}
+.sb-list{flex:1;overflow-y:auto;}
+.sb-list::-webkit-scrollbar{width:3px;}
+.sb-list::-webkit-scrollbar-thumb{background:var(--bdr2);}
+
+/* CARD — field report style */
+.acard{
+  padding:12px 14px 10px;border-bottom:1px solid var(--bdr);cursor:pointer;
+  transition:background .12s;border-left:3px solid transparent;position:relative;
+}
+.acard:hover{background:var(--surf2);}
+.acard.is-help{border-left-color:var(--red);}
+.acard.is-safe{border-left-color:var(--grn);}
+.acard.has-ambush{border-left-color:var(--amb);}
+.acard-head{display:flex;align-items:center;gap:7px;margin-bottom:5px;flex-wrap:wrap;}
+.acard-name{font-size:13px;font-weight:600;color:var(--txt);}
+.acard-status{
+  font-family:var(--mono);font-size:8px;font-weight:600;letter-spacing:.06em;
+  text-transform:uppercase;padding:2px 6px;border-radius:2px;
+}
+.acard-status.help{background:rgba(217,95,95,.1);color:var(--red);border:1px solid rgba(217,95,95,.2);}
+.acard-status.safe{background:rgba(74,171,120,.08);color:var(--grn);border:1px solid rgba(74,171,120,.18);}
+.acard-time{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-left:auto;flex-shrink:0;}
+.acard-msg{font-size:12.5px;color:var(--txt);line-height:1.55;margin-bottom:7px;}
+.acard-loc-row{display:flex;align-items:baseline;gap:5px;margin-bottom:9px;}
+.acard-loc-label{font-family:var(--mono);font-size:8px;color:#1a3a6b;text-transform:uppercase;letter-spacing:.08em;flex-shrink:0;text-decoration:underline;text-underline-offset:2px;}
+.acard-loc-val{font-family:var(--mono);font-size:9px;color:var(--txt2);}
+.card-thumb{width:100%;height:60px;object-fit:cover;border-radius:3px;margin-bottom:9px;border:1px solid var(--bdr2);display:none;}
+.card-thumb.show{display:block;}
+.acard-foot{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.trust-inline{display:flex;align-items:center;gap:4px;}
+.trust-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;}
+.trust-dot.hi{background:var(--grn);} .trust-dot.mi{background:var(--amb);} .trust-dot.lo{background:var(--red);}
+.trust-pct{font-family:var(--mono);font-size:9px;color:var(--txt3);}
+.acard-badges{display:flex;gap:3px;flex-wrap:wrap;align-items:center;}
+.badge{font-family:var(--mono);font-size:8px;padding:1px 5px;border-radius:2px;color:var(--txt3);border:1px solid var(--bdr2);letter-spacing:.03em;}
+.badge.unverified{color:var(--amb);border-color:rgba(160,98,10,.55);}
+.badge.cat{color:var(--pur);border-color:rgba(90,74,138,.5);}
+.badge.photo{color:var(--grn);border-color:rgba(42,122,80,.5);}
+.badge.proxy{color:var(--blue);border-color:rgba(42,95,154,.5);}
+.badge.ambush{color:var(--amb);border-color:rgba(160,98,10,.55);}
+.badge.queued{color:var(--txt3);border-color:var(--bdr2);}
+.vouch-btn{
+  margin-left:auto;background:none;border:1px solid var(--bdr2);border-radius:2px;
+  padding:2px 8px;font-family:var(--mono);font-size:9px;color:var(--txt3);
+  cursor:pointer;transition:all .15s;flex-shrink:0;white-space:nowrap;
+}
+.vouch-btn:hover{border-color:var(--grn);color:var(--grn);}
+.empty{padding:30px 16px;text-align:center;font-family:var(--mono);font-size:9px;color:var(--txt3);line-height:2.2;text-transform:uppercase;letter-spacing:.06em;}
+
+/* MAP */
+.map-area{flex:1;position:relative;}
+#leaflet-map{width:100%;height:100%;}
+#canvas-map{width:100%;height:100%;display:none;}
+.map-info{
+  position:absolute;top:10px;right:10px;z-index:500;
+  background:rgba(250,249,247,.95);border:1px solid var(--bdr2);border-radius:3px;
+  padding:4px 9px;font-family:var(--mono);font-size:9px;color:var(--txt3);
+}
+
+/* Leaflet popup */
+.l-popup .leaflet-popup-content-wrapper{
+  background:var(--surf);border:1px solid var(--bdr2);border-radius:7px;
+  color:var(--txt);box-shadow:0 8px 28px rgba(0,0,0,.5);padding:0;
+}
+.l-popup .leaflet-popup-tip{background:var(--surf);}
+.l-popup .leaflet-popup-content{margin:0;}
+.pop{min-width:210px;max-width:270px;padding:13px;}
+.pop-user{font-size:14px;font-weight:600;margin-bottom:2px;}
+.pop-user.r{color:var(--red);} .pop-user.g{color:var(--grn);}
+.pop-type{font-family:var(--mono);font-size:9px;color:var(--txt3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:7px;}
+.pop-msg{font-size:12px;color:var(--txt2);line-height:1.5;margin-bottom:8px;}
+.pop-aid{background:var(--surf2);border:1px solid var(--bdr2);border-radius:4px;padding:8px;font-size:11px;color:var(--txt2);line-height:1.5;margin-bottom:8px;}
+.pop-aid-lbl{font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.08em;color:var(--txt3);margin-bottom:4px;}
+.pop-photo{width:100%;border-radius:4px;margin-bottom:8px;border:1px solid var(--bdr2);display:none;}
+.pop-photo.show{display:block;}
+.pop-load-btn{width:100%;background:var(--surf2);border:1px solid var(--bdr2);border-radius:4px;color:var(--txt2);font-family:var(--mono);font-size:9px;padding:5px;cursor:pointer;margin-bottom:8px;letter-spacing:.03em;}
+.pop-load-btn:hover{border-color:var(--grn);color:var(--grn);}
+.pop-row{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;}
+.pop-score{font-family:var(--mono);font-size:9px;color:var(--txt3);}
+.pop-vouch{background:none;border:1px solid var(--bdr2);border-radius:3px;padding:2px 7px;font-family:var(--mono);font-size:9px;color:var(--txt3);cursor:pointer;}
+.pop-vouch:hover{border-color:var(--grn);color:var(--grn);}
+.pop-meta{font-family:var(--mono);font-size:9px;color:var(--txt3);line-height:1.8;}
+
+/* BOTTOM */
+.bottom{background:var(--surf);border-top:1px solid var(--bdr);flex-shrink:0;}
+.action-bar{display:flex;gap:8px;padding:10px 12px 0;}
+.em-btn{
+  flex:1;border:1px solid;border-radius:var(--r);padding:12px 8px;
+  cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:5px;
+  background:none;transition:background .15s;
+  -webkit-tap-highlight-color:transparent;
+}
+.em-btn:active{opacity:.75;}
+.em-btn.help{border-color:rgba(217,95,95,.35);}
+.em-btn.help:hover{background:var(--red-bg);}
+.em-btn.safe{border-color:rgba(74,171,120,.3);}
+.em-btn.safe:hover{background:var(--grn-bg);}
+.em-btn-label{font-size:13px;font-weight:700;letter-spacing:.01em;}
+.em-btn-label.r{color:var(--red);} .em-btn-label.g{color:var(--grn);}
+.em-btn-sub{font-family:var(--mono);font-size:8px;color:var(--txt3);letter-spacing:.06em;text-transform:uppercase;}
+.export-bar{display:flex;gap:4px;padding:8px 12px 10px;}
+.exp-btn{
+  flex:1;background:none;border:1px solid var(--bdr);border-radius:3px;
+  padding:5px;font-family:var(--mono);font-size:8px;color:var(--txt3);cursor:pointer;
+  transition:all .15s;letter-spacing:.04em;text-transform:uppercase;
+}
+.exp-btn:hover{border-color:var(--bdr2);color:var(--txt2);}
+
+/* MODAL */
+.overlay{
+  position:fixed;inset:0;background:rgba(100,95,88,.4);backdrop-filter:blur(5px);
+  z-index:600;display:flex;align-items:center;justify-content:center;
+  padding:12px;opacity:0;pointer-events:none;transition:opacity .22s;
+}
+.overlay.on{opacity:1;pointer-events:all;}
+.modal{
+  background:var(--surf);border:1px solid var(--bdr2);border-radius:10px;
+  width:100%;max-width:416px;max-height:88vh;overflow-y:auto;
+  transform:translateY(12px);transition:transform .22s;
+  scrollbar-width:thin;scrollbar-color:var(--bdr2) transparent;
+}
+.overlay.on .modal{transform:none;}
+.modal::-webkit-scrollbar{width:3px;}
+.modal::-webkit-scrollbar-thumb{background:var(--bdr2);}
+.modal-hdr{padding:15px 17px 11px;border-bottom:1px solid var(--bdr);position:sticky;top:0;background:var(--surf);z-index:1;}
+.modal-title{font-size:18px;font-weight:700;margin-bottom:3px;}
+.modal-title.r{color:var(--red);} .modal-title.g{color:var(--grn);}
+.modal-sub{font-family:var(--mono);font-size:9px;color:var(--txt3);line-height:1.6;letter-spacing:.02em;}
+.modal-body{padding:13px 17px;display:flex;flex-direction:column;gap:10px;}
+.field-label{display:block;font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--txt3);margin-bottom:5px;}
+.fi{
+  background:var(--surf2);border:1px solid var(--bdr2);border-radius:var(--r);
+  padding:9px 11px;color:var(--txt);font-family:var(--sans);font-size:13px;
+  width:100%;resize:none;outline:none;transition:border-color .15s;
+}
+.fi:focus{border-color:var(--txt3);box-shadow:0 0 0 2px rgba(90,140,192,.12);}
+.fi::placeholder{color:var(--txt3);}
+
+/* GPS */
+.gps-bar{
+  display:flex;align-items:center;gap:8px;padding:9px 11px;
+  border-radius:var(--r);border:1px solid var(--bdr2);
+  font-family:var(--mono);font-size:10px;background:var(--surf2);transition:all .22s;
+}
+.gps-bar.found {border-color:rgba(74,171,120,.35);background:rgba(74,171,120,.05);color:var(--grn);}
+.gps-bar.failed{border-color:rgba(196,146,58,.35);background:rgba(196,146,58,.05);color:var(--amb);}
+.gps-bar.detecting{color:var(--txt3);}
+.gps-coords{margin-left:auto;font-size:9px;color:var(--txt3);}
+
+/* Camera */
+.cam-wrap{border:1px solid var(--bdr2);border-radius:var(--r);overflow:hidden;}
+.cam-hdr{display:flex;align-items:center;justify-content:space-between;padding:9px 12px;cursor:pointer;background:var(--surf2);}
+.cam-hdr-label{font-size:12px;font-weight:500;color:var(--txt2);}
+.cam-badge{font-family:var(--mono);font-size:8px;padding:2px 6px;border-radius:2px;border:1px solid var(--bdr2);color:var(--txt3);letter-spacing:.04em;text-transform:uppercase;}
+.cam-badge.ok{color:var(--grn);border-color:rgba(74,171,120,.3);}
+.cam-body{display:none;padding:11px;border-top:1px solid var(--bdr);}
+.cam-body.open{display:block;}
+#cam-preview{width:100%;border-radius:3px;background:#000;display:none;max-height:140px;object-fit:cover;}
+#cam-preview.show{display:block;}
+#cam-captured{width:100%;border-radius:3px;border:1px solid var(--grn);display:none;max-height:140px;object-fit:cover;}
+#cam-captured.show{display:block;}
+#cam-canvas{display:none;}
+.cam-btns{display:flex;gap:6px;margin-top:8px;}
+.cam-btn{
+  flex:1;padding:7px;border:1px solid var(--bdr2);border-radius:4px;background:var(--surf);
+  color:var(--txt2);font-family:var(--mono);font-size:9px;letter-spacing:.04em;
+  cursor:pointer;text-transform:uppercase;transition:all .15s;
+}
+.cam-btn.primary{background:var(--surf3);color:var(--txt);}
+.cam-btn:hover{border-color:var(--bdr2);color:var(--txt);}
+.cam-status{font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:6px;text-align:center;}
+.cam-status.ok{color:var(--grn);}
+
+/* Proxy */
+.proxy-row{
+  display:flex;align-items:flex-start;gap:9px;padding:9px 11px;
+  background:var(--surf2);border:1px solid var(--bdr2);border-radius:var(--r);cursor:pointer;
+}
+.proxy-row input{accent-color:var(--blue);width:14px;height:14px;cursor:pointer;margin-top:3px;flex-shrink:0;}
+.proxy-text span{font-size:12px;color:var(--txt);}
+.proxy-text small{display:block;font-family:var(--mono);font-size:9px;color:var(--txt3);margin-top:1px;}
+
+/* Triage */
+.triage-box{
+  background:var(--surf2);border:1px solid var(--bdr2);border-radius:var(--r);
+  padding:9px 11px;display:none;
+}
+.triage-box.on{display:block;}
+.triage-cat{font-family:var(--mono);font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:var(--txt3);margin-bottom:5px;}
+.triage-aid{font-size:11px;color:var(--txt2);line-height:1.6;}
+
+/* Footer */
+.modal-foot{
+  display:grid;grid-template-columns:1fr 2fr;gap:7px;
+  padding:11px 17px 15px;border-top:1px solid var(--bdr);
+  position:sticky;bottom:0;background:var(--surf);
+}
+.btn-cancel{
+  background:none;border:1px solid var(--bdr2);border-radius:var(--r);
+  padding:10px;color:var(--txt3);font-family:var(--mono);font-size:9px;
+  letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .15s;
+}
+.btn-cancel:hover{color:var(--txt2);}
+.btn-send{
+  border:1px solid;border-radius:var(--r);padding:10px;font-family:var(--mono);
+  font-size:10px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;cursor:pointer;transition:all .15s;
+}
+.btn-send.r{background:var(--red-bg);border-color:rgba(217,95,95,.35);color:var(--red);}
+.btn-send.r:hover{background:rgba(217,95,95,.15);}
+.btn-send.g{background:var(--grn-bg);border-color:rgba(74,171,120,.3);color:var(--grn);}
+.btn-send.g:hover{background:rgba(74,171,120,.15);}
+
+/* Toast */
+.toast{
+  position:fixed;bottom:70px;left:50%;transform:translateX(-50%) translateY(50px);
+  background:var(--surf2);border:1px solid var(--bdr2);border-radius:var(--r);
+  padding:8px 15px;font-family:var(--mono);font-size:9px;letter-spacing:.04em;
+  z-index:700;transition:transform .3s cubic-bezier(.2,.9,.4,1.1);
+  white-space:nowrap;max-width:90vw;text-align:center;pointer-events:none;
+}
+.toast.show{transform:translateX(-50%) translateY(0);}
+.toast.r{border-color:rgba(217,95,95,.4);color:var(--red);}
+.toast.g{border-color:rgba(74,171,120,.35);color:var(--grn);}
+.toast.a{border-color:rgba(196,146,58,.35);color:var(--amb);}
+
+@media(max-width:680px){
+  .sidebar{position:absolute;left:-288px;top:0;bottom:0;z-index:350;transition:left .25s;box-shadow:6px 0 24px rgba(0,0,0,.4);}
+  .sidebar.open{left:0;}
+  .menu-btn{display:flex;}
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="hdr">
+    <div class="hdr-left">
+      <div class="live-dot"></div>
+      <div class="brand">CEC <span>/ Civil Emergency Connect / Syntax Squad</span></div>
+    </div>
+    <div class="hdr-right">
+      <div class="menu-btn" onclick="toggleSidebar()">&#9776;</div>
+      <div class="conn-tag offline" id="connTag">connecting...</div>
+    </div>
+  </div>
+
+  <div class="notice">
+    <div class="notice-txt">Active incident — Thapar Institute, Patiala (30.3522 N, 76.3608 E)</div>
+    <div class="notice-flags">
+      <div class="flag ambush" id="ambushPill">Ambush</div>
+      <div class="flag rural"  id="ruralPill">Rural</div>
+    </div>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="stat-n r" id="sHelp">—</div><div class="stat-l">Help</div></div>
+    <div class="stat"><div class="stat-n g" id="sSafe">—</div><div class="stat-l">Safe</div></div>
+    <div class="stat"><div class="stat-n b" id="sVer">—</div><div class="stat-l">Verified</div></div>
+    <div class="stat"><div class="stat-n a" id="sPhoto">—</div><div class="stat-l">Photos</div></div>
+    <div class="stat"><div class="stat-n w" id="sDev">—</div><div class="stat-l">Devices</div></div>
+    <div class="stat"><div class="stat-n w" id="sTotal">—</div><div class="stat-l">Total</div></div>
+  </div>
+
+  <div class="app-body">
+    <div class="sidebar" id="sidebar">
+      <div class="sb-tabs">
+        <div class="sb-tab on" onclick="setTab('all',this)">All</div>
+        <div class="sb-tab"   onclick="setTab('verified',this)">Verified</div>
+        <div class="sb-tab"   onclick="setTab('help',this)">Help</div>
+        <div class="sb-tab"   onclick="setTab('safe',this)">Safe</div>
+      </div>
+      <div class="sb-list" id="sbList"><div class="empty">Loading...</div></div>
+    </div>
+    <div class="map-area">
+      <div id="leaflet-map"></div>
+      <canvas id="canvas-map"></canvas>
+      <div class="map-info" id="workerBadge">connecting...</div>
+    </div>
+  </div>
+
+  <div class="bottom">
+    <div class="action-bar">
+      <button class="em-btn help" onclick="openModal('help')">
+        <div class="em-btn-label r">I need help</div>
+        <div class="em-btn-sub">Send emergency alert</div>
+      </button>
+      <button class="em-btn safe" onclick="openModal('safe')">
+        <div class="em-btn-label g">I am safe</div>
+        <div class="em-btn-sub">Confirm status</div>
+      </button>
+    </div>
+    <div class="export-bar">
+      <button class="exp-btn" onclick="doExport('csv')">Export CSV</button>
+      <button class="exp-btn" onclick="doExport('json')">Export JSON</button>
+      <button class="exp-btn" onclick="doExport('admin')">Admin CSV</button>
+      <button class="exp-btn" onclick="window.open('/api/status','_blank')">Status</button>
+    </div>
+  </div>
+
+</div>
+
+<div class="overlay" id="overlay" onclick="handleOverlayClick(event)">
+<div class="modal">
+  <div class="modal-hdr">
+    <div class="modal-title" id="mTitle"></div>
+    <div class="modal-sub"   id="mSub"></div>
+  </div>
+  <div class="modal-body">
+
+    <div class="gps-bar detecting" id="gpsBar">
+      <span id="gpsIcon">—</span>
+      <span id="gpsTxt" style="flex:1">Acquiring GPS...</span>
+      <span class="gps-coords" id="gpsCoords"></span>
+    </div>
+
+    <div>
+      <label class="field-label">Name</label>
+      <input class="fi" id="fName" placeholder="e.g. Rahul M." maxlength="50"/>
+    </div>
+
+    <div>
+      <label class="field-label">Message *</label>
+      <textarea class="fi" id="fMsg" rows="3" placeholder="" oninput="liveTriag()" maxlength="300"></textarea>
+    </div>
+
+    <div class="triage-box" id="triagePrev">
+      <div class="triage-cat" id="triageCat"></div>
+      <div class="triage-aid" id="triageAid"></div>
+    </div>
+
+    <div id="locRow" style="display:none">
+      <label class="field-label">Location <span style="font-size:8px;color:var(--txt3);text-transform:none">(overrides GPS)</span></label>
+      <input class="fi" id="fLoc" placeholder="e.g. Main Gate, Block C..." maxlength="120"/>
+    </div>
+
+    <div class="cam-wrap">
+      <div class="cam-hdr" onclick="toggleCam()">
+        <span class="cam-hdr-label">Evidence Photo</span>
+        <span class="cam-badge" id="camBadge">optional</span>
+      </div>
+      <div class="cam-body" id="camBody">
+        <video id="cam-preview" autoplay muted playsinline></video>
+        <canvas id="cam-canvas"></canvas>
+        <img id="cam-captured" alt="Evidence"/>
+        <div class="cam-btns">
+          <button class="cam-btn primary" id="camStartBtn" onclick="startCamera()">Open camera</button>
+          <button class="cam-btn" id="camSnapBtn" onclick="snapPhoto()" style="display:none">Capture</button>
+          <button class="cam-btn" id="camRetakeBtn" onclick="retakePhoto()" style="display:none">Retake</button>
+        </div>
+        <div class="cam-status" id="camStatus">Thumbnail will be attached to your report.</div>
+      </div>
+    </div>
+
+    <label class="proxy-row">
+      <input type="checkbox" id="fProxy" onchange="toggleProxy()"/>
+      <div class="proxy-text">
+        <span>Reporting for someone else</span>
+        <small>Use if the victim has no phone</small>
+      </div>
+    </label>
+    <div id="proxyRow" style="display:none">
+      <label class="field-label">Victim description</label>
+      <input class="fi" id="fProxyName" placeholder="e.g. elderly man, blue shirt, near library" maxlength="60"/>
+    </div>
+
+  </div>
+  <div class="modal-foot">
+    <button class="btn-cancel" onclick="closeModal()">Cancel</button>
+    <button class="btn-send r" id="mSend" onclick="submitReport()">Send alert</button>
+  </div>
+</div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API='', POLL_MS=4000, THAPAR=[30.3522,76.3608];
+
+let DEVICE_ID=localStorage.getItem('_cec_did');
+if(!DEVICE_ID){DEVICE_ID='D-'+Math.random().toString(36).slice(2,10).toUpperCase();localStorage.setItem('_cec_did',DEVICE_ID);}
+
+const TRIAGE_DB=[
+  {cat:'Medical',   kw:['injur','bleed','blood','broken','unconscious','heart','breath','medic','hospital','hurt','pain','wound','doctor','sick','seiz','faint','fractur'],aid:'Apply direct pressure to wounds with clean cloth. Keep victim still. Do not remove embedded objects. Elevate injured limb. Get a trained medic immediately.'},
+  {cat:'Fire',      kw:['fire','burn','smoke','flame','blaze','gas leak','explosion'],aid:'Crawl low under smoke — clean air is near the floor. Close doors to slow spread. Move upwind. Stop, drop, roll if on fire.'},
+  {cat:'Trapped',   kw:['trap','stuck','debris','rubble','buried','collapse','cant move','locked','crush','pinned'],aid:'Stay calm — unnecessary movement shifts debris. Tap on pipes rhythmically to signal rescuers. Conserve battery. Cover mouth from dust.'},
+  {cat:'Flood',     kw:['flood','water','drown','submerge','rising water','swept','current'],aid:'Move to highest ground immediately. Never walk through moving water. Signal from roof. Do not re-enter floodwater.'},
+  {cat:'Missing',   kw:['missing','lost','cant find','disappeared','gone','separated'],aid:'Stay at last known location if safe. Signal with whistle or torch flash. Do not wander alone at night.'},
+  {cat:'Food/Water',kw:['food','water','thirst','hungry','starv','supply','dehydrat'],aid:'Ration water — 0.5L/day minimum. Avoid exertion. Do not drink floodwater. Signal for supply drop.'},
+  {cat:'Safe',      kw:['safe','okay','fine','reached','evacuate','secure','assembly'],aid:null},
+];
+function triageLocal(msg){const l=(msg||'').toLowerCase();for(const r of TRIAGE_DB)if(r.kw.some(k=>l.includes(k)))return r;return{cat:'General',aid:'Stay visible. Conserve battery. Signal every 2 minutes.'};}
+
+const MOCK=[
+  {id:1,type:'NEED_HELP',lat:30.3535,lng:76.3595,user:'Rahul M.',message:'Trapped in hostel block C, ceiling collapsed',location:'Boys Hostel Block-C, Room 204',time:Date.now()-120000,trust:'verified',trustScore:87,category:'Trapped',firstAid:'Stay calm. Signal with torch.',proxy:false,vouches:2,hasPhoto:true},
+  {id:2,type:'NEED_HELP',lat:30.3510,lng:76.3620,user:'Priya S.',message:'Bleeding from leg, need medical help urgently',location:'Main Academic Block, 3rd Floor',time:Date.now()-300000,trust:'verified',trustScore:94,category:'Medical',firstAid:'Apply pressure. Elevate limb.',proxy:false,vouches:3,hasPhoto:true},
+  {id:3,type:'NEED_HELP',lat:30.3528,lng:76.3642,user:'Arjun K.',message:'Stuck under debris near east wing library',location:'Central Library, East Wing',time:Date.now()-480000,trust:'unverified',trustScore:28,category:'Trapped',firstAid:'Tap on pipe to signal.',proxy:false,vouches:0,hasPhoto:false},
+  {id:4,type:'SAFE',lat:30.3545,lng:76.3580,user:'Ananya R.',message:'Reached main gate safely, awaiting transport',location:'Main Gate, Thapar University',time:Date.now()-180000,trust:'verified',trustScore:79,category:'Safe',firstAid:null,proxy:false,vouches:1,hasPhoto:false},
+  {id:5,type:'SAFE',lat:30.3500,lng:76.3590,user:'Dev P.',message:'Evacuated to sports ground with 8 others',location:'Sports Ground, South Campus',time:Date.now()-360000,trust:'verified',trustScore:91,category:'Safe',firstAid:null,proxy:false,vouches:2,hasPhoto:true},
+];
+
+let allAlerts=[],serverOnline=false,currentType=null;
+let gpsLat=null,gpsLng=null,gpsReady=false,gpsAcc=null;
+let capturedPhoto=null,camStream=null,currentTab='all';
+let leafletMap=null,leafletPins={},usingLeaflet=false;
+let offlineQueue=JSON.parse(localStorage.getItem('_cec_q')||'[]');
+let offlineNextId=parseInt(localStorage.getItem('_cec_nid')||'200');
+
+// MAP
+function initLeaflet(){
+  if(typeof L==='undefined'){initCanvas();return;}
+  try{leafletMap=L.map('leaflet-map',{center:THAPAR,zoom:16});L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap',maxZoom:19}).addTo(leafletMap);usingLeaflet=true;}
+  catch(e){initCanvas();}
+}
+function initCanvas(){document.getElementById('leaflet-map').style.display='none';const c=document.getElementById('canvas-map');c.style.display='block';drawCanvas(c,MOCK);}
+const CL={la:30.349,ln:76.357},CH={la:30.356,ln:76.366};
+function lat2y(c,la){return c.height*(1-(la-CL.la)/(CH.la-CL.la));}
+function lng2x(c,ln){return c.width*(ln-CL.ln)/(CH.ln-CL.ln);}
+function drawCanvas(cv,data){
+  cv.width=cv.parentElement.offsetWidth;cv.height=cv.parentElement.offsetHeight;
+  const ctx=cv.getContext('2d');
+  ctx.fillStyle='#e8e6e2';ctx.fillRect(0,0,cv.width,cv.height);
+  ctx.strokeStyle='rgba(0,0,0,.05)';ctx.lineWidth=1;
+  for(let x=0;x<cv.width;x+=50){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,cv.height);ctx.stroke();}
+  for(let y=0;y<cv.height;y+=50){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(cv.width,y);ctx.stroke();}
+  ctx.fillStyle='rgba(0,0,0,.06)';
+  ctx.fillRect(0,cv.height*.4,cv.width,3);ctx.fillRect(0,cv.height*.7,cv.width,2);
+  ctx.fillRect(cv.width*.35,0,3,cv.height);ctx.fillRect(cv.width*.72,0,2,cv.height);
+  ctx.fillStyle='rgba(80,110,160,.07)';ctx.strokeStyle='rgba(80,110,160,.25)';ctx.lineWidth=1;
+  ctx.fillRect(cv.width*.37,cv.height*.18,cv.width*.34,cv.height*.42);
+  ctx.strokeRect(cv.width*.37,cv.height*.18,cv.width*.34,cv.height*.42);
+  ctx.fillStyle='rgba(40,60,120,.5)';ctx.font='10px IBM Plex Mono,monospace';ctx.textAlign='center';
+  ctx.fillText('THAPAR INSTITUTE',cv.width*.54,cv.height*.42);
+  data.forEach(a=>{
+    const x=lng2x(cv,a.lng),y=lat2y(cv,a.lat);
+    ctx.beginPath();ctx.arc(x,y,8,0,Math.PI*2);
+    ctx.fillStyle=a.type==='NEED_HELP'?'#d95f5f':'#4aab78';
+    ctx.globalAlpha=a.trust==='verified'?1:.5;ctx.fill();ctx.globalAlpha=1;
+    ctx.fillStyle='#1e1e1c';ctx.font='9px sans-serif';ctx.textAlign='center';
+    ctx.fillText(a.user.split(' ')[0],x,y+18);
+  });
+}
+
+function updateLeaflet(data){
+  if(!usingLeaflet)return;
+  const ids=new Set(data.map(a=>a.id));
+  for(const[id,m]of Object.entries(leafletPins))if(!ids.has(parseInt(id))){m.remove();delete leafletPins[id];}
+  data.forEach(a=>{
+    const isH=a.type==='NEED_HELP';
+    const col=isH?(a.trust==='verified'?'#d95f5f':'#b07070'):(a.trust==='verified'?'#4aab78':'#70a880');
+    const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="26" height="34" viewBox="0 0 26 34"><path d="M13 0C5.8 0 0 5.8 0 13C0 22.75 13 34 13 34S26 22.75 26 13C26 5.8 20.2 0 13 0Z" fill="${col}" stroke="#faf9f7" stroke-width="1.5"/><circle cx="13" cy="13" r="4" fill="rgba(0,0,0,.3)"/>${a.hasPhoto?`<circle cx="22" cy="6" r="4" fill="#4aab78" stroke="#faf9f7" stroke-width="1"/>`:''}</svg>`;
+    const icon=L.divIcon({className:'',html:svg,iconSize:[26,34],iconAnchor:[13,34],popupAnchor:[0,-34]});
+    const pop=buildPopup(a);
+    if(leafletPins[a.id]){leafletPins[a.id].setIcon(icon);leafletPins[a.id].setPopupContent(pop);}
+    else leafletPins[a.id]=L.marker([a.lat,a.lng],{icon}).addTo(leafletMap).bindPopup(pop,{className:'l-popup',maxWidth:290});
+  });
+}
+
+function buildPopup(a){
+  const isH=a.type==='NEED_HELP';
+  return `<div class="pop">
+    <div class="pop-user ${isH?'r':'g'}">${esc(a.user)}${a.proxy?` <span style="font-size:10px;color:var(--blue)">[proxy]</span>`:''}</div>
+    <div class="pop-type">${a.category||'General'} · ${isH?'needs help':'safe'}</div>
+    <div class="pop-msg">${esc(a.message)}</div>
+    ${a.firstAid?`<div class="pop-aid"><div class="pop-aid-lbl">First aid</div>${esc(a.firstAid)}</div>`:''}
+    ${a.hasPhoto?`<img id="pp${a.id}" class="pop-photo" src="" alt="Evidence"/><button class="pop-load-btn" onclick="loadPhoto(${a.id})">Load evidence photo</button>`:''}
+    <div class="pop-row">
+      <span style="color:${a.trust==='verified'?'var(--grn)':'var(--amb)'};">${a.trust==='verified'?'verified':'unverified'}</span>
+      <span class="pop-score">· score: ${a.trustScore}</span>
+      <button class="pop-vouch" onclick="doVouch(${a.id})">vouch (${a.vouches||0})</button>
+    </div>
+    <div class="pop-meta">${esc(a.location)}<br>${timeAgo(a.time)}${a.ambushFlag?'<br><span style="color:var(--amb)">ambush flag active</span>':''}</div>
+  </div>`;
+}
+
+async function loadPhoto(id){
+  try{const r=await fetch(`${API}/api/alert/${id}/photo`);const d=await r.json();const img=document.getElementById(`pp${id}`);if(img&&d.photoData){img.src=d.photoData.startsWith('data:')?d.photoData:`data:image/jpeg;base64,${d.photoData}`;img.classList.add('show');}}
+  catch(e){showToast('Photo unavailable','a');}
+}
+
+// API
+async function fetchAlerts(){
+  try{
+    const r=await fetch(`${API}/api/alerts`,{cache:'no-store'});
+    if(!r.ok)throw new Error();
+    const d=await r.json();
+    serverOnline=true;
+    setConn('online',`online · ${d.meta?.connectedDevices||1} device(s)`);
+    document.getElementById('workerBadge').textContent=`pid: ${d.meta?.workerId||'?'}`;
+    document.getElementById('ambushPill').classList.toggle('on',!!d.meta?.ambushActiveFlag);
+    document.getElementById('ruralPill').classList.toggle('on',!!d.meta?.ruralMode);
+    document.getElementById('sDev').textContent=d.meta?.connectedDevices||1;
+    syncOfflineQueue();
+    return d.alerts||[];
+  }catch(e){
+    serverOnline=false;setConn('offline','offline');
+    document.getElementById('workerBadge').textContent='offline mode';
+    document.getElementById('sDev').textContent='?';
+    return [...MOCK,...offlineQueue].sort((a,b)=>b.time-a.time);
+  }
+}
+
+async function syncOfflineQueue(){
+  for(const item of [...offlineQueue]){
+    try{
+      await fetch(`${API}/api/alerts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(item)});
+      offlineQueue=offlineQueue.filter(x=>x._localId!==item._localId);
+      localStorage.setItem('_cec_q',JSON.stringify(offlineQueue));
+      showToast(`Synced: ${item.user}`,'g');
+    }catch(e){break;}
+  }
+}
+
+async function postAlert(payload){
+  try{const b=await navigator.getBattery?.();if(b)payload.batteryLevel=b.level;}catch(e){}
+  payload.deviceId=DEVICE_ID;
+  try{
+    const r=await fetch(`${API}/api/alerts`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    if(r.status===403){const e=await r.json();throw Object.assign(new Error('BLOCKED'),{reason:e.reason||e.error});}
+    if(r.status===429)throw new Error('RATE');
+    if(!r.ok)throw new Error('HTTP '+r.status);
+    return await r.json();
+  }catch(e){
+    if(e.message==='BLOCKED'||e.message==='RATE')throw e;
+    const local={...payload,_localId:Date.now(),id:offlineNextId++,time:Date.now(),trust:'unverified',trustScore:15,category:triageLocal(payload.message||'').cat,firstAid:triageLocal(payload.message||'').aid,ambushFlag:false,vouches:0};
+    offlineQueue.unshift(local);if(offlineQueue.length>100)offlineQueue.pop();
+    localStorage.setItem('_cec_q',JSON.stringify(offlineQueue));localStorage.setItem('_cec_nid',String(offlineNextId));
+    return local;
+  }
+}
+
+async function doVouch(id){
+  try{
+    const r=await fetch(`${API}/api/vouch/${id}`,{method:'POST'});if(!r.ok)throw new Error();
+    const d=await r.json();const a=allAlerts.find(x=>x.id===id);
+    if(a){a.vouches=d.vouches;a.trustScore=d.trustScore;a.trust=d.trust;}
+    renderSidebar();updateLeaflet(allAlerts);showToast(`Vouched. Score: ${d.trustScore}`,'g');
+  }catch(e){showToast('Vouch saved locally','a');}
+}
+
+// RENDER
+const timeAgo=ts=>{const s=Math.floor((Date.now()-ts)/1000);if(s<60)return`${s}s ago`;if(s<3600)return`${Math.floor(s/60)}m ago`;return`${Math.floor(s/3600)}h ago`;};
+const esc=v=>String(v||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+const tbCls=s=>s>=70?'hi':s>=40?'mi':'lo';
+
+function renderStats(data){
+  document.getElementById('sHelp').textContent=data.filter(a=>a.type==='NEED_HELP').length;
+  document.getElementById('sSafe').textContent=data.filter(a=>a.type==='SAFE').length;
+  document.getElementById('sVer').textContent=data.filter(a=>a.trust==='verified').length;
+  document.getElementById('sPhoto').textContent=data.filter(a=>a.hasPhoto).length;
+  document.getElementById('sTotal').textContent=data.length;
+}
+
+function renderSidebar(){
+  const el=document.getElementById('sbList');
+  let data=[...allAlerts];
+  if(currentTab==='verified')data=data.filter(a=>a.trust==='verified');
+  if(currentTab==='help')data=data.filter(a=>a.type==='NEED_HELP');
+  if(currentTab==='safe')data=data.filter(a=>a.type==='SAFE');
+  if(!data.length){el.innerHTML='<div class="empty">No reports in this view.</div>';return;}
+  el.innerHTML=data.slice(0,80).map(a=>{
+    const isH=a.type==='NEED_HELP';
+    const tc=tbCls(a.trustScore||0);
+    const trustLabel=a.trust==='verified'?'verified':`${a.trustScore||0}% confidence`;
+    const badges=[];
+    if(a.trust!=='verified')badges.push('<span class="badge unverified">unverified</span>');
+    if(a.category&&a.category!=='Safe'&&a.category!=='General')badges.push(`<span class="badge cat">${esc(a.category).toLowerCase()}</span>`);
+    if(a.hasPhoto)badges.push('<span class="badge photo">has photo</span>');
+    if(a.proxy)badges.push('<span class="badge proxy">proxy report</span>');
+    if(a.ambushFlag)badges.push('<span class="badge ambush">ambush</span>');
+    if(a._localId)badges.push('<span class="badge queued">pending sync</span>');
+    const thumb=a.hasPhoto&&a.photoData?`<img class="card-thumb show" src="${a.photoData.startsWith('data:')?a.photoData:'data:image/jpeg;base64,'+a.photoData}" alt="Evidence"/>`:'';
+    return `<div class="acard ${isH?'is-help':'is-safe'}${a.ambushFlag?' has-ambush':''}" onclick="focusAlert(${a.id})">
+      <div class="acard-head">
+        <span class="acard-name">${esc(a.user)}</span>
+        <span class="acard-status ${isH?'help':'safe'}">${isH?'needs help':'safe'}</span>
+        <span class="acard-time">${timeAgo(a.time)}</span>
+      </div>
+      <div class="acard-msg">"${esc(a.message)}"</div>
+      ${thumb}
+      <div class="acard-loc-row">
+        <span class="acard-loc-label">current location</span>
+        <span class="acard-loc-val">${esc(a.location)}</span>
+      </div>
+      <div class="acard-foot">
+        <div class="trust-inline">
+          <span class="trust-dot ${tc}"></span>
+          <span class="trust-pct">${trustLabel}</span>
+        </div>
+        <div class="acard-badges">${badges.join('')}</div>
+        <button class="vouch-btn" onclick="event.stopPropagation();doVouch(${a.id})">${a.vouches||0} ${a.vouches===1?'vouch':'vouches'}</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+function focusAlert(id){
+  if(!usingLeaflet)return;
+  const a=allAlerts.find(x=>x.id===id);if(!a)return;
+  leafletMap.setView([a.lat,a.lng],17,{animate:true});leafletPins[id]?.openPopup();
+  document.getElementById('sidebar').classList.remove('open');
+}
+function setTab(tab,el){currentTab=tab;document.querySelectorAll('.sb-tab').forEach(t=>t.classList.remove('on'));el.classList.add('on');renderSidebar();}
+
+async function refresh(){
+  const data=await fetchAlerts();allAlerts=data;renderStats(data);renderSidebar();
+  if(usingLeaflet)updateLeaflet(data);
+  else{const c=document.getElementById('canvas-map');if(c.style.display!=='none')drawCanvas(c,data);}
+}
+setInterval(refresh,POLL_MS);refresh();
+
+// GPS
+(()=>{if(!navigator.geolocation)return;navigator.geolocation.getCurrentPosition(p=>{gpsLat=p.coords.latitude;gpsLng=p.coords.longitude;gpsReady=true;gpsAcc=p.coords.accuracy;},()=>{},{timeout:10000,maximumAge:60000});})();
+
+function detectGPS(){
+  if(!navigator.geolocation){setGPS('failed');return;}
+  setGPS('detecting');
+  navigator.geolocation.getCurrentPosition(
+    p=>{gpsLat=p.coords.latitude;gpsLng=p.coords.longitude;gpsReady=true;gpsAcc=p.coords.accuracy;setGPS('found');},
+    ()=>{gpsReady&&gpsLat?setGPS('found'):setGPS('failed');},
+    {timeout:7000,maximumAge:20000,enableHighAccuracy:true}
+  );
+}
+function setGPS(state){
+  const bar=document.getElementById('gpsBar'),icon=document.getElementById('gpsIcon'),txt=document.getElementById('gpsTxt'),coords=document.getElementById('gpsCoords');
+  bar.className='gps-bar '+state;
+  if(state==='detecting'){icon.textContent='...';txt.textContent='Acquiring GPS';coords.textContent='';}
+  else if(state==='found'){icon.textContent='GPS';txt.textContent=`Ready (±${gpsAcc?Math.round(gpsAcc):30}m)`;coords.textContent=`${gpsLat.toFixed(5)}, ${gpsLng.toFixed(5)}`;document.getElementById('locRow').style.display='none';}
+  else{icon.textContent='n/a';txt.textContent='GPS unavailable — enter location manually';coords.textContent='';document.getElementById('locRow').style.display='block';}
+}
+
+// CAMERA
+function toggleCam(){document.getElementById('camBody').classList.toggle('open');}
+async function startCamera(){
+  try{
+    camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:320,height:240},audio:false});
+    const v=document.getElementById('cam-preview');v.srcObject=camStream;v.classList.add('show');
+    document.getElementById('camStartBtn').style.display='none';document.getElementById('camSnapBtn').style.display='block';
+    document.getElementById('camStatus').textContent='Ready — tap Capture.';
+  }catch(e){document.getElementById('camStatus').textContent='Camera access denied. Submit without photo.';}
+}
+function snapPhoto(){
+  const vid=document.getElementById('cam-preview'),cv=document.getElementById('cam-canvas');
+  cv.width=320;cv.height=240;const ctx=cv.getContext('2d');ctx.drawImage(vid,0,0,320,240);
+  ctx.fillStyle='rgba(0,0,0,.55)';ctx.fillRect(0,210,320,30);
+  ctx.fillStyle='#c8d4e0';ctx.font='10px IBM Plex Mono,monospace';
+  ctx.fillText(`CEC · ${new Date().toISOString().slice(0,19).replace('T',' ')}`,6,228);
+  capturedPhoto=cv.toDataURL('image/jpeg',0.55);
+  camStream?.getTracks().forEach(t=>t.stop());camStream=null;
+  document.getElementById('cam-preview').classList.remove('show');
+  const img=document.getElementById('cam-captured');img.src=capturedPhoto;img.classList.add('show');
+  document.getElementById('camSnapBtn').style.display='none';document.getElementById('camRetakeBtn').style.display='block';
+  document.getElementById('camBadge').textContent='captured';document.getElementById('camBadge').className='cam-badge ok';
+  document.getElementById('camStatus').textContent='Captured. Will be attached to report.';document.getElementById('camStatus').className='cam-status ok';
+  showToast('Photo captured','g');
+}
+function retakePhoto(){
+  capturedPhoto=null;document.getElementById('cam-captured').classList.remove('show');
+  document.getElementById('camRetakeBtn').style.display='none';document.getElementById('camStartBtn').style.display='block';
+  document.getElementById('camBadge').textContent='optional';document.getElementById('camBadge').className='cam-badge';
+  document.getElementById('camStatus').textContent='Thumbnail will be attached to your report.';document.getElementById('camStatus').className='cam-status';
+}
+
+// TRIAGE
+function liveTriag(){
+  const msg=document.getElementById('fMsg').value;
+  if(msg.length<4){document.getElementById('triagePrev').classList.remove('on');return;}
+  const r=triageLocal(msg);
+  document.getElementById('triageCat').textContent=`category: ${r.cat}`;
+  document.getElementById('triageAid').textContent=r.aid||'No specific first-aid steps.';
+  document.getElementById('triagePrev').classList.add('on');
+}
+
+// MODAL
+function openModal(type){
+  currentType=type;capturedPhoto=null;
+  const isH=type==='help';
+  document.getElementById('mTitle').textContent=isH?'I need help':'I am safe';
+  document.getElementById('mTitle').className='modal-title '+(isH?'r':'g');
+  document.getElementById('mSub').textContent=isH?'GPS locates you automatically. Describe your situation. Adding a photo increases your trust score.':'Confirm your safety and let others know where you are.';
+  document.getElementById('mSend').textContent=isH?'Send emergency alert':'Confirm safe';
+  document.getElementById('mSend').className='btn-send '+(isH?'r':'g');
+  document.getElementById('fMsg').placeholder=isH?'What do you need? (trapped / injured / fire / water...)':'Where are you? (assembly point / main gate...)';
+  ['fName','fMsg','fLoc','fProxyName'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  document.getElementById('fProxy').checked=false;document.getElementById('proxyRow').style.display='none';
+  document.getElementById('locRow').style.display=isH?'none':'block';
+  document.getElementById('triagePrev').classList.remove('on');
+  document.getElementById('camBody').classList.remove('open');
+  document.getElementById('cam-preview').classList.remove('show');document.getElementById('cam-captured').classList.remove('show');
+  document.getElementById('camStartBtn').style.display='block';document.getElementById('camSnapBtn').style.display='none';document.getElementById('camRetakeBtn').style.display='none';
+  document.getElementById('camBadge').textContent='optional';document.getElementById('camBadge').className='cam-badge';
+  document.getElementById('camStatus').textContent='Thumbnail will be attached to your report.';document.getElementById('camStatus').className='cam-status';
+  document.getElementById('overlay').classList.add('on');
+  detectGPS();
+}
+function closeModal(){camStream?.getTracks().forEach(t=>t.stop());camStream=null;document.getElementById('overlay').classList.remove('on');}
+function handleOverlayClick(e){if(e.target===document.getElementById('overlay'))closeModal();}
+function toggleProxy(){document.getElementById('proxyRow').style.display=document.getElementById('fProxy').checked?'block':'none';}
+
+async function submitReport(){
+  const msg=document.getElementById('fMsg').value.trim();
+  if(!msg){const ta=document.getElementById('fMsg');ta.style.boxShadow='0 0 0 2px rgba(217,95,95,.35)';ta.focus();setTimeout(()=>ta.style.boxShadow='',2000);return;}
+  const name=document.getElementById('fName').value.trim()||'Anonymous';
+  const locOver=document.getElementById('fLoc').value.trim();
+  const isProxy=document.getElementById('fProxy').checked;
+  const proxyFor=document.getElementById('fProxyName').value.trim();
+  const finalLat=gpsReady&&gpsLat?gpsLat:THAPAR[0]+(Math.random()-.5)*.004;
+  const finalLng=gpsReady&&gpsLng?gpsLng:THAPAR[1]+(Math.random()-.5)*.004;
+  const loc=locOver||(gpsReady&&gpsLat?`${gpsLat.toFixed(5)}, ${gpsLng.toFixed(5)}`:'Thapar Institute Campus');
+  closeModal();
+  try{
+    const result=await postAlert({type:currentType==='help'?'NEED_HELP':'SAFE',lat:finalLat,lng:finalLng,user:name,message:msg,location:loc,proxy:isProxy,reportedBy:isProxy?proxyFor:null,vouches:0,photoData:capturedPhoto,gpsAccuracy:gpsReady?gpsAcc:null});
+    if(result.ambushFlag)showToast('Ambush pattern detected nearby','a');
+    const wasOffline=!!result._localId;
+    showToast(wasOffline?'Saved offline — will sync later':(currentType==='help'?'Alert sent':'Safe status confirmed'),wasOffline?'a':(currentType==='help'?'r':'g'));
+    refresh();
+  }catch(e){
+    if(e.message==='BLOCKED')showToast('Flagged by security: '+e.reason,'r');
+    else if(e.message==='RATE')showToast('Too many requests. Wait 60 seconds.','r');
+    else{showToast('Saved locally — will sync when server is up','a');refresh();}
+  }
+}
+
+// EXPORT
+function doExport(type){
+  if(serverOnline){window.open(API+(type==='json'?'/admin/json':'/admin/export'),'_blank');}
+  else{
+    const COLS=['id','type','category','trust','trustScore','vouches','user','message','location','lat','lng','proxy','hasPhoto','ambushFlag','time'];
+    const ev=v=>`"${String(v??'').replace(/"/g,'""')}"`;
+    if(type==='json')dl(JSON.stringify(allAlerts,null,2),'application/json',`cec_${Date.now()}.json`);
+    else dl([COLS.join(','),...allAlerts.map(a=>COLS.map(c=>ev(c==='time'?new Date(a[c]).toISOString():a[c])).join(','))].join('\r\n'),'text/csv',`cec_${Date.now()}.csv`);
+    showToast('Exported (offline mode)','a');
+  }
+}
+function dl(content,type,name){const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([content],{type}));a.download=name;a.click();URL.revokeObjectURL(a.href);}
+
+// UI
+function setConn(state,label){const c=document.getElementById('connTag');c.className='conn-tag '+state;c.textContent=label;}
+let toastTimer;
+function showToast(msg,type){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(type||'');clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',3800);}
+function toggleSidebar(){document.getElementById('sidebar').classList.toggle('open');}
+
+initLeaflet();
+</script>
+</body>
+</html>
